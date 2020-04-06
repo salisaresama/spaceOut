@@ -102,19 +102,15 @@ def clean_and_enrich(df, nlp):
     return(df)
 
 def scan_for_files(directories):
-    filesDone = [f for f in os.listdir(directories[0])]
-    filesToProcess = [directories[1] + f for f in os.listdir(directories[1]) if f in filesDone]
-    return filesToProcess
+    filesDone = [directories[0] + f for f in os.listdir(directories[0])]
+    return(filesDone)
 
 def cleanup(filesToDelete, directories):
-    for directory in directories: 
-        files = os.listdir(directory)
-        for i in filesToDelete:
-            if i in files:
-                os.remove(directory + i)            
+    for i in filesToDelete:
+        os.remove(i)           
                 
 def index_to_es(df,index_name):
-    es = Elasticsearch()
+    es = Elasticsearch("10.94.253.5")
     helpers.bulk(es, doc_generator(df, index_name))
 
 
@@ -124,28 +120,27 @@ def index_to_es(df,index_name):
 def main(interval=60):
     
     nlp = spacy.load("en_core_web_lg")
-    nlp.max_length = 200000
+    nlp.max_length = 2000000
     nlp.add_pipe(LanguageDetector(), name='language_detector', last=True)
-    directories = ["/tempDisk/warc_extract/ready_to_copy/", "/tempDisk/warc_extract/"]
+    directories = ["/data/tmp/"]
     
     while True:
         # Get files to process
         filesToProcess = scan_for_files(directories)
-
-        # Load them and proces one at a time
-        for file in tqdm(filesToProcess):
-            df = pd.read_csv(file, engine="python")
-            df = clean_and_enrich(df=df, nlp=nlp)
-            df.head()
+        if len(filesToProcess) > 0:
+            # Load them and process one at a time
+            for file in tqdm(filesToProcess):
+                df = pd.read_csv(file, engine="python")
+                df = clean_and_enrich(df=df, nlp=nlp)
             
-            # Index into Elasticsearch
-            index_to_es(df, index_name="november2019")
+                # Index into Elasticsearch
+                index_to_es(df, index_name="november2019")
         
-        # Delete files
-        cleanup(filesToProcess, directories)
-        
-        # Wait a minute!
-        time.sleep(interval)
+            # Delete files
+            cleanup(filesToProcess)
+        else:
+            # Wait a minute!
+            time.sleep(interval)
 
 
 # In[4]:
