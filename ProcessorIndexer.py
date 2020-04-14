@@ -14,10 +14,8 @@ import collections
 import spacy
 from spacy_langdetect import LanguageDetector
 import time
-from tqdm.notebook import tqdm
 from multiprocessing import Process, Queue, Manager
 from multiprocessing.pool import Pool
-from functools import partial
 
 
 # In[2]:
@@ -105,7 +103,7 @@ def scan_for_files(directories):
     filesDone = [directories[0] + f for f in os.listdir(directories[0])]
     return(filesDone)
 
-def cleanup(filesToDelete, directories):
+def cleanup(filesToDelete):
     for i in filesToDelete:
         os.remove(i)           
                 
@@ -129,8 +127,8 @@ def main(interval=60):
         filesToProcess = scan_for_files(directories)
         if len(filesToProcess) > 0:
             # Load them and process one at a time
-            for file in tqdm(filesToProcess):
-                df = pd.read_csv(file, engine="python")
+            for f in filesToProcess:
+                df = pd.read_csv(f, engine="python")
                 df = clean_and_enrich(df=df, nlp=nlp)
             
                 # Index into Elasticsearch
