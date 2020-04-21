@@ -18,9 +18,6 @@ from multiprocessing import Process, Queue, Manager
 from multiprocessing.pool import Pool
 
 
-# In[2]:
-
-
 def doc_generator(df, index_name):
     # This function creates documents from dataframe rows, and then 
     # indexes those documents in ElasticSearch
@@ -112,9 +109,6 @@ def index_to_es(df,index_name):
     helpers.bulk(es, doc_generator(df, index_name))
 
 
-# In[5]:
-
-
 def main(interval=60):
     
     nlp = spacy.load("en_core_web_lg")
@@ -128,7 +122,11 @@ def main(interval=60):
         if len(filesToProcess) > 0:
             # Load them and process one at a time
             for f in filesToProcess:
-                df = pd.read_csv(f, engine="python")
+                try:
+                    df = pd.read_csv(f, engine="python")
+                except:
+                    print("Problem with file", f)
+                    continue
                 df = clean_and_enrich(df=df, nlp=nlp)
             
                 # Index into Elasticsearch
@@ -145,10 +143,8 @@ def main(interval=60):
 
 
 if __name__ == "__main__":
+ 
     main()
-
-
-# In[ ]:
 
 
 
