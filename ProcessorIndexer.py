@@ -135,6 +135,7 @@ def processCsvFile(tuple):
     # Index into Elasticsearch
     index_to_es(df, index_name="november2019")
 
+    # os.remove(tuple[0])
     print("Cleaning up file", tuple[0])
 
     return tuple[0]
@@ -153,6 +154,7 @@ def main(interval=60):
         pool = Pool(6)  # 6 Cores for starters
         # Get files to process
         filesToProcess = scan_for_files(directories)
+        print("Files to process: ", filesToProcess)
 
         result = pool.imap_unordered(processCsvFile, zip(filesToProcess, repeat(nlp)))
         pool.close()
