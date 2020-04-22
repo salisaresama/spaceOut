@@ -148,7 +148,7 @@ def main(interval=60):
         # Get files to process
         filesToProcess = scan_for_files(directories)
 
-        pool.map(processCsvFile, zip(tqdm(filesToProcess), repeat(nlp)))
+        pool.map(processCsvFile, zip(filesToProcess, repeat(nlp)))
         pool.close()
         pool.join()
 
