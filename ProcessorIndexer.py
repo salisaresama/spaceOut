@@ -145,7 +145,7 @@ def main(interval=60):
         pool.join()
 
         # Delete files
-        cleanup(filesToProcess, directories)
+        cleanup(filesToProcess)
 
         # Wait a minute!
         time.sleep(interval)
