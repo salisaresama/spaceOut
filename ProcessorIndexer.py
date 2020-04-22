@@ -3,7 +3,6 @@
 
 # In[1]:
 
-
 from elasticsearch import Elasticsearch
 import pandas as pd
 import os
@@ -137,7 +136,11 @@ def processCsvFile(tuple):
     index_to_es(df, index_name="november2019")
 
     print("Cleaning up file", tuple[0])
-   # os.remove(tuple[0])
+
+    return tuple[0]
+
+
+# os.remove(tuple[0])
 
 
 def main(interval=60):
@@ -151,13 +154,16 @@ def main(interval=60):
         # Get files to process
         filesToProcess = scan_for_files(directories)
 
-        pool.map(processCsvFile, zip(filesToProcess, repeat(nlp)))
+        result = pool.imap_unordered(processCsvFile, zip(filesToProcess, repeat(nlp)))
         pool.close()
         pool.join()
 
         # Wait a minute!
         print("Waiting a minute to start all over")
         time.sleep(interval)
+
+        for r in result:
+            print(result)
 
 
 # In[4]:
