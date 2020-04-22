@@ -123,22 +123,22 @@ def index_to_es(df, index_name):
 
 # In[5]:
 
-def processCsvFile(tuple):
+def process_csv_file(file_and_nlp):
     try:
-        df = pd.read_csv(tuple[0], engine="python")
-        print("Successfully read file", tuple[0])
+        df = pd.read_csv(file_and_nlp[0], engine="python")
+        print("Successfully read file", file_and_nlp[0])
     except:
-        print("Problem with file", tuple[0])
+        print("Problem with file", file_and_nlp[0])
         return
-    df = clean_and_enrich(df=df, nlp=tuple[1])
+    df = clean_and_enrich(df=df, nlp=file_and_nlp[1])
 
     # Index into Elasticsearch
     index_to_es(df, index_name="november2019")
 
-    # os.remove(tuple[0])
-    print("Cleaning up file", tuple[0])
+    print("Cleaning up file", file_and_nlp[0])
+    os.remove(file_and_nlp[0])
 
-    return tuple[0]
+    return file_and_nlp[0]
 
 
 # os.remove(tuple[0])
@@ -150,13 +150,15 @@ def main(interval=60):
     nlp.add_pipe(LanguageDetector(), name='language_detector', last=True)
     directories = ["/data/tmp/"]
 
+    print("Monitoring directories: ", directories)
+
     while True:
         pool = Pool(6)  # 6 Cores for starters
         # Get files to process
-        filesToProcess = scan_for_files(directories)
-        print("Files to process: ", filesToProcess)
+        files_to_process = scan_for_files(directories)
+        print("Found files to process: ", files_to_process)
 
-        result = pool.imap_unordered(processCsvFile, zip(filesToProcess, repeat(nlp)))
+        result = pool.imap_unordered(process_csv_file, zip(files_to_process, repeat(nlp)))
         pool.close()
         pool.join()
 
@@ -165,7 +167,7 @@ def main(interval=60):
         time.sleep(interval)
 
         for r in result:
-            print(result)
+            print(r)
 
 
 # In[4]:
