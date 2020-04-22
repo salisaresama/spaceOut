@@ -18,6 +18,7 @@ from tqdm.notebook import tqdm
 from multiprocessing import Process, Queue, Manager
 from multiprocessing.pool import Pool
 from functools import partial
+from itertools import repeat
 
 
 # In[2]:
@@ -120,33 +121,36 @@ def index_to_es(df,index_name):
 
 # In[5]:
 
+def processCsvFile(tuple):
+    df = pd.read_csv(tuple[0], engine="python")
+    df = clean_and_enrich(df=df, nlp=tuple[1])
+    df.head()
+
+    # Index into Elasticsearch
+    index_to_es(df, index_name="november2019")
+
 
 def main(interval=60):
-    
     nlp = spacy.load("en_core_web_lg")
     nlp.max_length = 200000
     nlp.add_pipe(LanguageDetector(), name='language_detector', last=True)
     directories = ["/tempDisk/warc_extract/ready_to_copy/", "/tempDisk/warc_extract/"]
+
+    pool = Pool(6)     # 6 Cores for starters
     
     while True:
         # Get files to process
         filesToProcess = scan_for_files(directories)
 
-        # Load them and proces one at a time
-        for file in tqdm(filesToProcess):
-            df = pd.read_csv(file, engine="python")
-            df = clean_and_enrich(df=df, nlp=nlp)
-            df.head()
-            
-            # Index into Elasticsearch
-            index_to_es(df, index_name="november2019")
-        
+        pool.map(processCsvFile, zip(tqdm(filesToProcess), repeat(nlp)))
+        pool.close()
+        pool.join()
+
         # Delete files
         cleanup(filesToProcess, directories)
-        
+
         # Wait a minute!
         time.sleep(interval)
-
 
 # In[4]:
 
