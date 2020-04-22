@@ -14,7 +14,6 @@ import collections
 import spacy
 from spacy_langdetect import LanguageDetector
 import time
-from tqdm.notebook import tqdm
 from multiprocessing import Process, Queue, Manager
 from multiprocessing.pool import Pool
 from functools import partial
@@ -22,6 +21,7 @@ from itertools import repeat
 
 
 # In[2]:
+from tqdm import tqdm
 
 
 def doc_generator(df, index_name):
@@ -103,28 +103,27 @@ def clean_and_enrich(df, nlp):
     return(df)
 
 def scan_for_files(directories):
-    filesDone = [f for f in os.listdir(directories[0])]
-    filesToProcess = [directories[1] + f for f in os.listdir(directories[1]) if f in filesDone]
-    return filesToProcess
+    filesDone = [directories[0] + f for f in os.listdir(directories[0])]
+    return(filesDone)
 
-def cleanup(filesToDelete, directories):
-    for directory in directories: 
-        files = os.listdir(directory)
-        for i in filesToDelete:
-            if i in files:
-                os.remove(directory + i)            
+def cleanup(filesToDelete):
+    for i in filesToDelete:
+        os.remove(i)
                 
 def index_to_es(df,index_name):
-    es = Elasticsearch()
+    es = Elasticsearch("10.94.253.5")
     helpers.bulk(es, doc_generator(df, index_name))
 
 
 # In[5]:
 
 def processCsvFile(tuple):
-    df = pd.read_csv(tuple[0], engine="python")
+    try:
+        df = pd.read_csv(tuple[0], engine="python")
+    except:
+        print("Problem with file", tuple[0])
+        return
     df = clean_and_enrich(df=df, nlp=tuple[1])
-    df.head()
 
     # Index into Elasticsearch
     index_to_es(df, index_name="november2019")
@@ -132,12 +131,11 @@ def processCsvFile(tuple):
 
 def main(interval=60):
     nlp = spacy.load("en_core_web_lg")
-    nlp.max_length = 200000
+    nlp.max_length = 2000000
     nlp.add_pipe(LanguageDetector(), name='language_detector', last=True)
-    directories = ["/tempDisk/warc_extract/ready_to_copy/", "/tempDisk/warc_extract/"]
+    directories = ["/data/tmp/"]
 
-    pool = Pool(6)     # 6 Cores for starters
-    
+    pool = Pool(6)  # 6 Cores for starters
     while True:
         # Get files to process
         filesToProcess = scan_for_files(directories)
@@ -156,10 +154,8 @@ def main(interval=60):
 
 
 if __name__ == "__main__":
+
     main()
-
-
-# In[ ]:
 
 
 
