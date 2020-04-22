@@ -136,6 +136,9 @@ def processCsvFile(tuple):
     # Index into Elasticsearch
     index_to_es(df, index_name="november2019")
 
+    print("Cleaning up file", tuple[0])
+   # os.remove(tuple[0])
+
 
 def main(interval=60):
     nlp = spacy.load("en_core_web_lg")
@@ -143,8 +146,8 @@ def main(interval=60):
     nlp.add_pipe(LanguageDetector(), name='language_detector', last=True)
     directories = ["/data/tmp/"]
 
-    pool = Pool(6)  # 6 Cores for starters
     while True:
+        pool = Pool(6)  # 6 Cores for starters
         # Get files to process
         filesToProcess = scan_for_files(directories)
 
@@ -152,10 +155,8 @@ def main(interval=60):
         pool.close()
         pool.join()
 
-        # Delete files
-        cleanup(filesToProcess)
-
         # Wait a minute!
+        print("Waiting a minute to start all over")
         time.sleep(interval)
 
 
