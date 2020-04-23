@@ -156,7 +156,7 @@ def main(interval=60):
     number_of_parallel_processes = 30
 
     while True:
-        pool = Pool(processes=number_of_parallel_processes, initializer=child_initialize, initargs=nlp)  # 6 Cores for starters
+        pool = Pool(processes=number_of_parallel_processes, initializer=child_initialize, initargs=(nlp))  # 6 Cores for starters
         # Get files to process
         # Currently files incoming faster then they are processed
         # If we always take all files - then each next processing time will be greater than previous
