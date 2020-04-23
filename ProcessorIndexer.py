@@ -151,11 +151,16 @@ def main(interval=60):
     directories = ["/data/tmp/"]
 
     print("Monitoring directories: ", directories)
+    number_of_parallel_processes = 6
 
     while True:
-        pool = Pool(6)  # 6 Cores for starters
+        pool = Pool(number_of_parallel_processes)  # 6 Cores for starters
         # Get files to process
-        files_to_process = scan_for_files(directories)
+        # Currently files incoming faster then they are processed
+        # If we always take all files - then each next processing time will be greater than previous
+        # As a result more new files will arrive, this in turn will further increase processing time
+        # At some point there will be no place for new files.
+        files_to_process = scan_for_files(directories)[:number_of_parallel_processes * 2]
         print("Found files to process: ", files_to_process)
 
         result = pool.imap_unordered(process_csv_file, zip(files_to_process, repeat(nlp)))
