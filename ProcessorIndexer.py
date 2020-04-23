@@ -123,25 +123,27 @@ def index_to_es(df, index_name):
 
 # In[5]:
 
-def process_csv_file(file_and_nlp):
+def child_initialize(_nlp):
+    global nlp
+    nlp = _nlp
+
+
+def process_csv_file(file):
     try:
-        df = pd.read_csv(file_and_nlp[0], engine="python")
-        print("Successfully read file", file_and_nlp[0])
+        df = pd.read_csv(file, engine="python")
+        print("Successfully read file", file)
     except:
-        print("Problem with file", file_and_nlp[0])
+        print("Problem with file", file)
         return
-    df = clean_and_enrich(df=df, nlp=file_and_nlp[1])
+    df = clean_and_enrich(df=df, nlp=nlp)
 
     # Index into Elasticsearch
     index_to_es(df, index_name="november2019")
 
-    print("Cleaning up file", file_and_nlp[0])
-    os.remove(file_and_nlp[0])
+    print("Cleaning up file", file)
+    os.remove(file)
 
-    return file_and_nlp[0]
-
-
-# os.remove(tuple[0])
+    return file
 
 
 def main(interval=60):
@@ -154,7 +156,7 @@ def main(interval=60):
     number_of_parallel_processes = 30
 
     while True:
-        pool = Pool(number_of_parallel_processes)  # 6 Cores for starters
+        pool = Pool(processes=number_of_parallel_processes, initializer=child_initialize, initargs=nlp)  # 6 Cores for starters
         # Get files to process
         # Currently files incoming faster then they are processed
         # If we always take all files - then each next processing time will be greater than previous
@@ -163,7 +165,7 @@ def main(interval=60):
         files_to_process = scan_for_files(directories)[:number_of_parallel_processes * 2]
         print("Found files to process: ", files_to_process)
 
-        result = pool.imap_unordered(process_csv_file, zip(files_to_process, repeat(nlp)))
+        result = pool.map(process_csv_file, files_to_process)
         pool.close()
         pool.join()
 
