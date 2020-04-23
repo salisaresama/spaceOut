@@ -2,6 +2,8 @@
 # coding: utf-8
 
 # In[1]:
+import threading
+from queue import Queue
 
 from elasticsearch import Elasticsearch
 import pandas as pd
@@ -13,8 +15,6 @@ import collections
 import spacy
 from spacy_langdetect import LanguageDetector
 import time
-from multiprocessing import Process, Queue, Manager
-from multiprocessing.pool import Pool
 from functools import partial
 from itertools import repeat
 
@@ -123,61 +123,108 @@ def index_to_es(df, index_name):
 
 # In[5]:
 
-def child_initialize(_nlp):
-    global nlp
-    nlp = _nlp
+
+def init_langdetect():
+    langdetect = spacy.blank("xx")
+    sentencizer = langdetect.create_pipe("sentencizer")
+    langdetect.add_pipe(sentencizer)
+    langdetect.add_pipe(LanguageDetector(), name='language_detector')
+    return langdetect
+
+
+def get_language(model, text):
+    return model(text)._.language["language"]
 
 
 def process_csv_file(file):
     try:
         df = pd.read_csv(file, engine="python")
-        print("Successfully read file", file)
+        # Find all languages that are present in file. Each line might have different language
+        # df['language'] = get_language(langdetect, df['maintext'])
+        df['language'] = [get_language(langdetect, str(text)) for text in df["maintext"].to_list()]
+        # Partition dataframe by languages
+        unique_languages = df['language'].unique()
+        print("INPUT: Successfully read file", file, "with languages", unique_languages)
+        for language in unique_languages:
+            # Fixme: Pass language to this method. and check what is inside.
+            tmpdf = clean_and_enrich(df=df[df['language'] == language], nlp=nlp_models[language])
+
+            # Index into Elasticsearch
+            index_to_es(tmpdf, index_name="november2019")
+
+        print("Cleaning up file", file)
+        os.remove(file)
+
+        return file
     except:
-        print("Problem with file", file)
+        print("INPUT: Problem with file", file)
         return
-    df = clean_and_enrich(df=df, nlp=nlp)
 
-    # Index into Elasticsearch
-    index_to_es(df, index_name="november2019")
 
-    print("Cleaning up file", file)
-    os.remove(file)
+class WorkerThread(threading.Thread):
+    def __init__(self, id, q):
+        threading.Thread.__init__(self)
+        self.threadID = id
+        self.name = "Worker" + str(id)
+        self.q = q
 
-    return file
+    def run(self):
+        print("Starting " + self.name)
+        while not exitFlag:
+            if not filesQueue.empty():
+                queueLock.acquire()
+                file_name = self.q.get()
+                queueLock.release()
+                process_csv_file(file_name)
+        print("Exiting " + self.name)
 
 
 def main(interval=60):
-    nlp = spacy.load("en_core_web_lg")
-    nlp.max_length = 2000000
-    nlp.add_pipe(LanguageDetector(), name='language_detector', last=True)
+    number_of_parallel_threads = 20
+    global nlp_models, queueLock, exitFlag, filesQueue, langdetect
+    langdetect = init_langdetect()
+    exitFlag = False
+    queueLock = threading.Lock()
+    nlp_models = {
+        "en": spacy.load("en_core_web_lg"),
+        "de": spacy.load("de_core_news_md"),
+        "el": spacy.load("el_core_news_md"),
+        "es": spacy.load("es_core_news_md"),
+        "fr": spacy.load("fr_core_news_md"),
+        "it": spacy.load("it_core_news_sm"),
+        "lt": spacy.load("lt_core_news_sm"),
+        "nb": spacy.load("nb_core_news_sm"),
+        "nl": spacy.load("nl_core_news_sm"),
+        "pt": spacy.load("pt_core_news_sm"),
+    }
+    filesQueue = Queue(number_of_parallel_threads * 2)
+    threads = []
+    # Create new threads
+    for id in range(number_of_parallel_threads):
+        thread = WorkerThread("Worker" + str(id), filesQueue)
+        thread.start()
+        threads.append(thread)
+
+    for nlp in nlp_models.values():
+        nlp.max_length = 40000
+
     directories = ["/data/tmp/"]
 
     print("Monitoring directories: ", directories)
-    number_of_parallel_processes = 30
 
     while True:
-        pool = Pool(processes=number_of_parallel_processes, initializer=child_initialize, initargs=(nlp,))  # 6 Cores for starters
-        # Get files to process
-        # Currently files incoming faster then they are processed
-        # If we always take all files - then each next processing time will be greater than previous
-        # As a result more new files will arrive, this in turn will further increase processing time
-        # At some point there will be no place for new files.
-        files_to_process = scan_for_files(directories)[:number_of_parallel_processes * 2]
-        print("Found files to process: ", files_to_process)
+        files_to_process = scan_for_files(directories)[:filesQueue.qsize()]
+        for f in files_to_process:
+            filesQueue.put(f)
 
-        result = pool.map(process_csv_file, files_to_process)
-        pool.close()
-        pool.join()
+        print("Found files to process: ", files_to_process)
 
         # Wait a minute!
         print("Waiting a minute to start all over")
+        # FIXME: This is not efficient. We need to continue all the time, just need to make sure not to add same file
+        #  twice to the queue
+        filesQueue.join()
         time.sleep(interval)
-
-        for r in result:
-            print(r)
-
-
-# In[4]:
 
 
 if __name__ == "__main__":
