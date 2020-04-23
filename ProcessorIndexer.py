@@ -151,7 +151,7 @@ def main(interval=60):
     directories = ["/data/tmp/"]
 
     print("Monitoring directories: ", directories)
-    number_of_parallel_processes = 6
+    number_of_parallel_processes = 30
 
     while True:
         pool = Pool(number_of_parallel_processes)  # 6 Cores for starters
