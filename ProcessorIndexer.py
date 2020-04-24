@@ -82,6 +82,8 @@ def clean_and_enrich(df, nlp):
     # Drop duplicates by text
     df.drop_duplicates(subset="maintext", inplace=True)
 
+    df['maintext'] = df['maintext'].replace(to_replace='^https?:\/\/.*[\r\n]*', value='', regex=True)
+
     # Simple wash of text 
     df.replace('\n', ' ', regex=True, inplace=True)
 
@@ -98,7 +100,7 @@ def clean_and_enrich(df, nlp):
         # Language was already detected previously
         # languages = [doc._.language["language"] for doc in docs]
         lemmas = [
-            [token.lemma_ for token in doc if not token.is_stop and re.search("[^\W\d_]", token, flags=re.UNICODE)]
+            [token.lemma_ for token in doc if not token.is_stop and re.search("[^\W\d_]", token.text, flags=re.UNICODE)]
             for doc in docs]
 
         # df["language"] = languages
