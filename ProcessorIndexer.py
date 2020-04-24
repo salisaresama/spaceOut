@@ -3,6 +3,7 @@
 
 # In[1]:
 import re
+import sys
 import threading
 import traceback
 from queue import Queue
@@ -157,6 +158,7 @@ def process_csv_file(file):
     except:
         print("INPUT: Problem with file", file, flush=True)
         traceback.print_exc()
+        sys.stdout.flush()
 
 
 class WorkerThread(threading.Thread):
@@ -175,6 +177,21 @@ class WorkerThread(threading.Thread):
                 process_csv_file(file_name)
                 self.processed_queue.put(file_name)
         print("Exiting " + self.name)
+
+
+class ModelLoaderThread(threading.Thread):
+    def __init__(self, lang_model_name):
+        threading.Thread.__init__(self)
+        self.threadID = lang_model_name
+        self.name = "ModelLoader: " + str(lang_model_name)
+        self.loaded_model = None
+
+    def run(self):
+        print("INFO: Loading nlp model: ", self.threadID, flush=True)
+        self.loaded_model = spacy.load(self.threadID)
+
+    def get_loaded_model(self):
+        return self.loaded_model
 
 
 def main(interval=60):
@@ -197,9 +214,15 @@ def main(interval=60):
     print("INFO: Loading nlp models: ", nlp_models_raw, flush=True)
 
     nlp_models = dict()
+    model_loading_threads = dict()
     for lang_code, lang_model_name in nlp_models_raw.items():
-        print("INFO: Loading nlp model: ", lang_code, lang_model_name, flush=True)
-        nlp_models[lang_code] = spacy.load(lang_model_name)
+        thread = ModelLoaderThread(lang_model_name)
+        model_loading_threads[lang_code] = thread
+        thread.start()
+
+    for lang_code, loading_thread in model_loading_threads.items():
+        loading_thread.join()
+        nlp_models[lang_code] = loading_thread.get_loaded_model()
 
     print("INFO: NLP models loaded successfully: ", nlp_models_raw, flush=True)
 
