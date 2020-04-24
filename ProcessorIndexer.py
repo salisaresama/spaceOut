@@ -192,11 +192,13 @@ def main(interval=60):
         "nl": "nl_core_news_sm",
         "pt": "pt_core_news_sm",
     }
-    print("INFO: Load nlp models: ", nlp_models_raw)
+    print("INFO: Loading nlp models: ", nlp_models_raw)
 
     nlp_models = dict()
-    for tpl in nlp_models_raw:
-        nlp_models[tpl[0]] = spacy.load(tpl[1])
+    for lang_code in nlp_models_raw.keys():
+        lang_model_name = nlp_models_raw[lang_code]
+        print("INFO: Loading nlp model: ", lang_code, lang_model_name)
+        nlp_models[lang_code] = spacy.load(lang_model_name)
 
     print("INFO: NLP models loaded successfully: ", nlp_models_raw)
 
