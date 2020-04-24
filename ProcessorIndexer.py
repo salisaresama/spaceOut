@@ -142,12 +142,14 @@ def get_language(model, text):
 
 def process_csv_file(file):
     try:
+        print("INPUT: Reading file", file, "to dataframe", flush=True)
         df = pd.read_csv(file, engine="python")
+        print("INPUT: Reading file", file, "done - OK", flush=True)
         # Find all languages that are present in file. Each line might have different language
         df['language'] = [get_language(langdetect, str(text)) for text in df["maintext"].to_list()]
         # Partition dataframe by languages
         unique_languages = df['language'].unique()
-        print("INPUT: Successfully read file", file, "with languages", unique_languages, flush=True)
+        print("INPUT: In file", file, "are languages", unique_languages, flush=True)
         for language in unique_languages:
             # Fixme: Pass language to this method. and check what is inside.
             tmpdf = clean_and_enrich(df[df['language'] == language], nlp_models.get(language))
@@ -191,13 +193,14 @@ class ModelLoaderThread(threading.Thread):
     def run(self):
         print("INFO: Loading nlp model: ", self.threadID, flush=True)
         self.loaded_model = spacy.load(self.threadID)
+        print("INFO: Loaded nlp model: ", self.threadID, flush=True)
 
     def get_loaded_model(self):
         return self.loaded_model
 
 
 def main(interval=60):
-    number_of_parallel_threads = 20
+    number_of_parallel_threads = 30
     global nlp_models, exitFlag, langdetect
     langdetect = init_langdetect()
     exitFlag = False  # Not used currently. Set it to true to make threads terminate gracefully
