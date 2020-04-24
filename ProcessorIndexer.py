@@ -2,7 +2,9 @@
 # coding: utf-8
 
 # In[1]:
+import re
 import threading
+import traceback
 from queue import Queue
 
 from elasticsearch import Elasticsearch
@@ -45,7 +47,7 @@ def safe_date(date_value):
         return (datetime(2000, 1, 1, 0, 0))
 
 
-def clean_and_enrich(df, nlp, lang):
+def clean_and_enrich(df, nlp):
     # This method does basic pre-processing of the text to make it 
     # ready for indexing to ES.
 
@@ -82,26 +84,28 @@ def clean_and_enrich(df, nlp, lang):
     # Simple wash of text 
     df.replace('\n', ' ', regex=True, inplace=True)
 
-    docs = list(nlp.pipe(df["maintext"].astype(str)))
+    if not nlp is None:
+        docs = list(nlp.pipe(df["maintext"].astype(str)))
+        people = [[ent.text.strip('\'s').strip('’') for ent in doc.ents if (ent.label_ == "PERSON")] for doc in docs]
+        places = [[ent.text for ent in doc.ents if (ent.label_ == "LOC" or ent.label_ == "FAC" or ent.label_ == "GPE")]
+                  for doc in docs]
+        orgs = [[ent.text for ent in doc.ents if (ent.label_ == "ORG")] for doc in docs]
+        concepts = [[ent.text for ent in doc.ents if
+                     ent.label_ not in ["LOC", "ORG", "FACE", "PERSON", "GPE", "PERCENT", "ORDINAL", "CARDINAL"]] for
+                    doc in docs]
 
-    people = [[ent.text.strip('\'s').strip('’') for ent in doc.ents if (ent.label_ == "PERSON")] for doc in docs]
-    places = [[ent.text for ent in doc.ents if (ent.label_ == "LOC" or ent.label_ == "FAC" or ent.label_ == "GPE")]
-              for doc in docs]
-    orgs = [[ent.text for ent in doc.ents if (ent.label_ == "ORG")] for doc in docs]
-    concepts = [[ent.text for ent in doc.ents if
-                 ent.label_ not in ["LOC", "ORG", "FACE", "PERSON", "GPE", "PERCENT", "ORDINAL", "CARDINAL"]] for
-                doc in docs]
+        # Language was already detected previously
+        # languages = [doc._.language["language"] for doc in docs]
+        lemmas = [
+            [token.lemma_ for token in doc if not token.is_stop and re.search("[^\W\d_]", token, flags=re.UNICODE)]
+            for doc in docs]
 
-    # Language was already detected previously
-    # languages = [doc._.language["language"] for doc in docs]
-    lemmas = [[token.lemma_ for token in doc] for doc in docs]
-
-    # df["language"] = languages
-    df["people"] = people
-    df["places"] = places
-    df["orgs"] = orgs
-    df["concepts"] = concepts
-    df["lemma"] = lemmas
+        # df["language"] = languages
+        df["people"] = people
+        df["places"] = places
+        df["orgs"] = orgs
+        df["concepts"] = concepts
+        df["lemma"] = lemmas
 
     return (df)
 
@@ -119,9 +123,6 @@ def cleanup(filesToDelete):
 def index_to_es(df, index_name):
     es = Elasticsearch("10.94.253.5")
     helpers.bulk(es, doc_generator(df, index_name))
-
-
-# In[5]:
 
 
 def init_langdetect():
@@ -143,18 +144,19 @@ def process_csv_file(file):
         df['language'] = [get_language(langdetect, str(text)) for text in df["maintext"].to_list()]
         # Partition dataframe by languages
         unique_languages = df['language'].unique()
-        print("INPUT: Successfully read file", file, "with languages", unique_languages)
+        print("INPUT: Successfully read file", file, "with languages", unique_languages, flush=True)
         for language in unique_languages:
             # Fixme: Pass language to this method. and check what is inside.
-            tmpdf = clean_and_enrich(df[df['language'] == language], nlp_models[language], language)
+            tmpdf = clean_and_enrich(df[df['language'] == language], nlp_models.get(language))
 
             # Index into Elasticsearch
             index_to_es(tmpdf, index_name="november2019")
 
-        print("Cleaning up file", file)
+        print("Cleaning up file", file, flush=True)
         os.remove(file)
     except:
-        print("INPUT: Problem with file", file)
+        print("INPUT: Problem with file", file, flush=True)
+        traceback.print_exc()
 
 
 class WorkerThread(threading.Thread):
@@ -192,15 +194,14 @@ def main(interval=60):
         "nl": "nl_core_news_sm",
         "pt": "pt_core_news_sm",
     }
-    print("INFO: Loading nlp models: ", nlp_models_raw)
+    print("INFO: Loading nlp models: ", nlp_models_raw, flush=True)
 
     nlp_models = dict()
-    for lang_code in nlp_models_raw.keys():
-        lang_model_name = nlp_models_raw[lang_code]
-        print("INFO: Loading nlp model: ", lang_code, lang_model_name)
+    for lang_code, lang_model_name in nlp_models_raw.items():
+        print("INFO: Loading nlp model: ", lang_code, lang_model_name, flush=True)
         nlp_models[lang_code] = spacy.load(lang_model_name)
 
-    print("INFO: NLP models loaded successfully: ", nlp_models_raw)
+    print("INFO: NLP models loaded successfully: ", nlp_models_raw, flush=True)
 
     # Queue with files that needs to be processed
     input_files_queue = Queue(number_of_parallel_threads * 2)
@@ -210,7 +211,7 @@ def main(interval=60):
     files_in_processing = set()
     threads = []
     # Create new threads
-    print("INFO: Preparing ", number_of_parallel_threads, "worker threads")
+    print("INFO: Preparing ", number_of_parallel_threads, "worker threads", flush=True)
     for id in range(number_of_parallel_threads):
         thread = WorkerThread("Worker" + str(id), input_files_queue, done_files_queue)
         thread.start()
@@ -221,7 +222,7 @@ def main(interval=60):
 
     directories = ["/data/tmp/"]
 
-    print("INFO: Monitoring directories: ", directories)
+    print("INFO: Monitoring directories: ", directories, flush=True)
 
     while True:
         files_to_process = scan_for_files(directories)
@@ -244,10 +245,10 @@ def main(interval=60):
                     # If no more free space in queue - continue further
                     break
 
-        print("Files currently in processing: ", files_in_processing)
+        print("Files currently in processing: ", files_in_processing, flush=True)
 
         # Wait a minute!
-        print("Waiting for ", interval, "seconds to start all over")
+        print("Waiting for ", interval, "seconds to start all over", flush=True)
         time.sleep(interval)
 
 
