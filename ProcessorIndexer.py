@@ -84,20 +84,13 @@ def clean_and_enrich(df, nlp, lang):
 
     docs = list(nlp.pipe(df["maintext"].astype(str)))
 
-    # FIXME: Add more languages here
-    if lang == "en":
-        people = [[ent.text.strip('\'s').strip('’') for ent in doc.ents if (ent.label_ == "PERSON")] for doc in docs]
-        places = [[ent.text for ent in doc.ents if (ent.label_ == "LOC" or ent.label_ == "FAC" or ent.label_ == "GPE")]
-                  for doc in docs]
-        orgs = [[ent.text for ent in doc.ents if (ent.label_ == "ORG")] for doc in docs]
-        concepts = [[ent.text for ent in doc.ents if
-                     ent.label_ not in ["LOC", "ORG", "FACE", "PERSON", "GPE", "PERCENT", "ORDINAL", "CARDINAL"]] for
-                    doc in docs]
-    else:
-        people = []
-        places = []
-        orgs = []
-        concepts = []
+    people = [[ent.text.strip('\'s').strip('’') for ent in doc.ents if (ent.label_ == "PERSON")] for doc in docs]
+    places = [[ent.text for ent in doc.ents if (ent.label_ == "LOC" or ent.label_ == "FAC" or ent.label_ == "GPE")]
+              for doc in docs]
+    orgs = [[ent.text for ent in doc.ents if (ent.label_ == "ORG")] for doc in docs]
+    concepts = [[ent.text for ent in doc.ents if
+                 ent.label_ not in ["LOC", "ORG", "FACE", "PERSON", "GPE", "PERCENT", "ORDINAL", "CARDINAL"]] for
+                doc in docs]
 
     # Language was already detected previously
     # languages = [doc._.language["language"] for doc in docs]
