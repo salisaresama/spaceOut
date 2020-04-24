@@ -45,7 +45,7 @@ def safe_date(date_value):
         return (datetime(2000, 1, 1, 0, 0))
 
 
-def clean_and_enrich(df, nlp):
+def clean_and_enrich(df, nlp, lang):
     # This method does basic pre-processing of the text to make it 
     # ready for indexing to ES.
 
@@ -83,20 +83,27 @@ def clean_and_enrich(df, nlp):
     df.replace('\n', ' ', regex=True, inplace=True)
 
     docs = list(nlp.pipe(df["maintext"].astype(str)))
-    people = [[ent.text.strip('\'s').strip('’') for ent in doc.ents if (ent.label_ == "PERSON")] if doc._.language[
-                                                                                                        "language"] == "en" else []
-              for doc in docs]
-    places = [[ent.text for ent in doc.ents if (ent.label_ == "LOC" or ent.label_ == "FAC" or ent.label_ == "GPE")] if
-              doc._.language["language"] == "en" else [] for doc in docs]
-    orgs = [[ent.text for ent in doc.ents if (ent.label_ == "ORG")] if doc._.language["language"] == "en" else [] for
-            doc in docs]
-    concepts = [[ent.text for ent in doc.ents if
-                 ent.label_ not in ["LOC", "ORG", "FACE", "PERSON", "GPE", "PERCENT", "ORDINAL", "CARDINAL"]] if
-                doc._.language["language"] == "en" else [] for doc in docs]
-    languages = [doc._.language["language"] for doc in docs]
+
+    # FIXME: Add more languages here
+    if lang == "en":
+        people = [[ent.text.strip('\'s').strip('’') for ent in doc.ents if (ent.label_ == "PERSON")] for doc in docs]
+        places = [[ent.text for ent in doc.ents if (ent.label_ == "LOC" or ent.label_ == "FAC" or ent.label_ == "GPE")]
+                  for doc in docs]
+        orgs = [[ent.text for ent in doc.ents if (ent.label_ == "ORG")] for doc in docs]
+        concepts = [[ent.text for ent in doc.ents if
+                     ent.label_ not in ["LOC", "ORG", "FACE", "PERSON", "GPE", "PERCENT", "ORDINAL", "CARDINAL"]] for
+                    doc in docs]
+    else:
+        people = []
+        places = []
+        orgs = []
+        concepts = []
+
+    # Language was already detected previously
+    # languages = [doc._.language["language"] for doc in docs]
     lemmas = [[token.lemma_ for token in doc] for doc in docs]
 
-    df["language"] = languages
+    # df["language"] = languages
     df["people"] = people
     df["places"] = places
     df["orgs"] = orgs
@@ -140,68 +147,77 @@ def process_csv_file(file):
     try:
         df = pd.read_csv(file, engine="python")
         # Find all languages that are present in file. Each line might have different language
-        # df['language'] = get_language(langdetect, df['maintext'])
         df['language'] = [get_language(langdetect, str(text)) for text in df["maintext"].to_list()]
         # Partition dataframe by languages
         unique_languages = df['language'].unique()
         print("INPUT: Successfully read file", file, "with languages", unique_languages)
         for language in unique_languages:
             # Fixme: Pass language to this method. and check what is inside.
-            tmpdf = clean_and_enrich(df=df[df['language'] == language], nlp=nlp_models[language])
+            tmpdf = clean_and_enrich(df[df['language'] == language], nlp_models[language], language)
 
             # Index into Elasticsearch
             index_to_es(tmpdf, index_name="november2019")
 
         print("Cleaning up file", file)
         os.remove(file)
-
-        return file
     except:
         print("INPUT: Problem with file", file)
-        return
 
 
 class WorkerThread(threading.Thread):
-    def __init__(self, id, q):
+    def __init__(self, id, input_queue, processed_queue):
         threading.Thread.__init__(self)
         self.threadID = id
         self.name = "Worker" + str(id)
-        self.q = q
+        self.input_queue = input_queue
+        self.processed_queue = processed_queue
 
     def run(self):
         print("Starting " + self.name)
         while not exitFlag:
-            if not filesQueue.empty():
-                queueLock.acquire()
-                file_name = self.q.get()
-                queueLock.release()
+            if not self.input_queue.empty():
+                file_name = self.input_queue.get()
                 process_csv_file(file_name)
+                self.processed_queue.put(file_name)
         print("Exiting " + self.name)
 
 
 def main(interval=60):
     number_of_parallel_threads = 20
-    global nlp_models, queueLock, exitFlag, filesQueue, langdetect
+    global nlp_models, exitFlag, langdetect
     langdetect = init_langdetect()
-    exitFlag = False
-    queueLock = threading.Lock()
-    nlp_models = {
-        "en": spacy.load("en_core_web_lg"),
-        "de": spacy.load("de_core_news_md"),
-        "el": spacy.load("el_core_news_md"),
-        "es": spacy.load("es_core_news_md"),
-        "fr": spacy.load("fr_core_news_md"),
-        "it": spacy.load("it_core_news_sm"),
-        "lt": spacy.load("lt_core_news_sm"),
-        "nb": spacy.load("nb_core_news_sm"),
-        "nl": spacy.load("nl_core_news_sm"),
-        "pt": spacy.load("pt_core_news_sm"),
+    exitFlag = False  # Not used currently. Set it to true to make threads terminate gracefully
+    nlp_models_raw = {
+        "en": "en_core_web_lg",
+        "de": "de_core_news_md",
+        "el": "el_core_news_md",
+        "es": "es_core_news_md",
+        "fr": "fr_core_news_md",
+        "it": "it_core_news_sm",
+        "lt": "lt_core_news_sm",
+        "nb": "nb_core_news_sm",
+        "nl": "nl_core_news_sm",
+        "pt": "pt_core_news_sm",
     }
-    filesQueue = Queue(number_of_parallel_threads * 2)
+    print("INFO: Load nlp models: ", nlp_models_raw)
+
+    nlp_models = dict()
+    for tpl in nlp_models_raw:
+        nlp_models[tpl[0]] = spacy.load(tpl[1])
+
+    print("INFO: NLP models loaded successfully: ", nlp_models_raw)
+
+    # Queue with files that needs to be processed
+    input_files_queue = Queue(number_of_parallel_threads * 2)
+    # Queue with files that are already processed
+    done_files_queue = Queue(number_of_parallel_threads * 3)
+    # Files that are already in queue or currently processing.
+    files_in_processing = set()
     threads = []
     # Create new threads
+    print("INFO: Preparing ", number_of_parallel_threads, "worker threads")
     for id in range(number_of_parallel_threads):
-        thread = WorkerThread("Worker" + str(id), filesQueue)
+        thread = WorkerThread("Worker" + str(id), input_files_queue, done_files_queue)
         thread.start()
         threads.append(thread)
 
@@ -210,20 +226,33 @@ def main(interval=60):
 
     directories = ["/data/tmp/"]
 
-    print("Monitoring directories: ", directories)
+    print("INFO: Monitoring directories: ", directories)
 
     while True:
-        files_to_process = scan_for_files(directories)[:filesQueue.qsize()]
-        for f in files_to_process:
-            filesQueue.put(f)
+        files_to_process = scan_for_files(directories)
+        # All files that are processed by this time should be deleted from `files_in_processing` set
+        while True:
+            try:
+                files_in_processing.remove(done_files_queue.get_nowait())
+            except:
+                # When no more files in queue - continue further
+                break
 
-        print("Found files to process: ", files_to_process)
+        # Add new files from directory to processing queue and "mark" them as in-processing
+        # When no more files can be added to queue - it is full, continue loop
+        for f in files_to_process:
+            if not f in files_in_processing:
+                try:
+                    input_files_queue.put_nowait(f)
+                    files_in_processing.add(f)
+                except:
+                    # If no more free space in queue - continue further
+                    break
+
+        print("Files currently in processing: ", files_in_processing)
 
         # Wait a minute!
-        print("Waiting a minute to start all over")
-        # FIXME: This is not efficient. We need to continue all the time, just need to make sure not to add same file
-        #  twice to the queue
-        filesQueue.join()
+        print("Waiting for ", interval, "seconds to start all over")
         time.sleep(interval)
 
 
