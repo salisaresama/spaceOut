@@ -226,22 +226,22 @@ if __name__ == '__main__':
 
     # Currently, the list contains only languages supported by MUSE
     LANGUAGES = [
-        # "ar",
-        # "zh",
-        # "zh-tw",
-        # "nl",
+        "ar",
+        "zh",
+        "zh-tw",
+        "nl",
         "en",
-        # "de",
-        # "fr",
-        # "it",
-        # "pt",
-        # "es",
-        # "ja",
-        # "ko",
-        # "ru",
-        # "pl",
-        # "th",
-        # "tr"
+        "de",
+        "fr",
+        "it",
+        "pt",
+        "es",
+        "ja",
+        "ko",
+        "ru",
+        "pl",
+        "th",
+        "tr"
     ]
 
     # Parse arguments
