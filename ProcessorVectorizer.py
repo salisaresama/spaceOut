@@ -217,7 +217,7 @@ def main() -> None:
         clean_vector_index(es)
 
         print(f'{timestamp()}: sleeping {TIME_SLEEP}s')
-        time.sleep(5)
+        time.sleep(TIME_SLEEP)
 
 
 if __name__ == '__main__':
