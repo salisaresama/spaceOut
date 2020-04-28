@@ -147,7 +147,7 @@ def process_csv_file(file):
         print("INPUT: Reading file", file, "done - OK", flush=True)
         # Find all languages that are present in file. Each line might have different language
         # Synthesize longer texts for more accurate language detection
-        texts = [" ".join([str(x) + str(y) + str(z) for x, y, z in zip(df["title"].to_list(), df["description"].to_list(), df["maintext"].to_list())]
+        texts = [" ".join([str(x) + str(y) + str(z)]) for x, y, z in zip(df["title"].to_list(), df["description"].to_list(), df["maintext"].to_list())]
         df['language'] = [get_language(langdetect, text) for text in texts]
         # Partition dataframe by languages
         unique_languages = df['language'].unique()
