@@ -90,7 +90,7 @@ def vector_generator(es: Elasticsearch,
                 text = text[:min(TEXT_MAX, len(text))]
                 vector = vectorizer.vectorize(text, **params_vectorizer)
                 yield {
-                    'vector': vector,
+                    'vector': vector[0],
                     '_id': doc['_id'],
                     'date_published': doc['_source']['article']['date_publish'],
                     '_index': index_to,
@@ -211,6 +211,20 @@ def main() -> None:
 
     es = Elasticsearch(ES_SERVER)
     vr = Vectorizer(method=MODEL, path_to_model=MODEL_PATH)
+    
+    # Create a fresh index for vectors
+    if es.indices.exists('recent_vectors'):
+        es.indices.delete('recent_vectors')
+        mappings = {
+            'mappings': {
+                'properties': {
+                    'date_published': {'type': 'date'},
+                    'vector': {'type': 'dense_vector', 'dims': 512}
+                }
+            }
+        }
+        es.indices.create(index='recent_vectors', body=mappings)
+    # print(es.indices.get('recent_vectors'))
 
     while True:
         update_vector_index(es=es, vectorizer=vr)
@@ -226,22 +240,22 @@ if __name__ == '__main__':
 
     # Currently, the list contains only languages supported by MUSE
     LANGUAGES = [
-        "ar",
-        "zh",
-        "zh-tw",
-        "nl",
+#         "ar",
+#         "zh",
+#         "zh-tw",
+#         "nl",
         "en",
-        "de",
+#         "de",
         "fr",
-        "it",
-        "pt",
-        "es",
-        "ja",
-        "ko",
+#         "it",
+#         "pt",
+#         "es",
+#         "ja",
+#         "ko",
         "ru",
-        "pl",
-        "th",
-        "tr"
+#         "pl",
+#         "th",
+#         "tr"
     ]
 
     # Parse arguments
@@ -260,7 +274,7 @@ if __name__ == '__main__':
                         help='path to the vectorization model '
                              '(for more information, read the documentation '
                              'for the "Vectorizer" class)')
-    parser.add_argument('--text_max', default=5000, type=int,
+    parser.add_argument('--text_max', default=1500, type=int,
                         help='maximal number of characters '
                              '(starting from the beginning of the article) '
                              'to account for')
